@@ -1,232 +1,240 @@
-# AE Backend Code Challenge
+# Anglo-Eastern Ship Management – Backend Solution
 
-## Objective
+[![Build & Test CI](https://github.com/angloeastern/backend-code-challenge/actions/workflows/ci.yml/badge.svg)](https://github.com/angloeastern/backend-code-challenge/actions/workflows/ci.yml)
+![.NET 8](https://img.shields.io/badge/.NET-8.0-blue.svg)
+![SQL Server](https://img.shields.io/badge/SQL%20Server-2019%2B-red.svg)
+![Tests](https://img.shields.io/badge/Tests-66%20Passed-brightgreen.svg)
 
-This challenge assesses your ability to design and implement a backend solution that includes:
-
-- Designing a SQL Server database schema and stored procedures using T-SQL  
-- Building REST APIs in C# that consume those stored procedures  
-- Implementing features around ship management, crew, and financial reporting  
-
-**Tech stack requirements:**  
-- Database: SQL Server
-- Backend: C#  
-- Testing: xUnit  
-- Database access via stored procedures only
+Production-ready backend solution for ship management, crew rosters, and hierarchical financial expense reporting. Built with **C# (.NET 8)** and **Microsoft SQL Server (T-SQL)**, adhering strictly to the architectural constraint: **Database access via stored procedures only**.
 
 ---
 
-## Domain Model & Business Rules
+## 1. Architecture & Design Principles
 
-The challenge models a ship management system with these main entities:
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      REST API Layer                         │
+│  (ASP.NET Core Web API, Swagger UI, JWT Bearer Auth)        │
+└──────────────┬──────────────────────────────┬───────────────┘
+               │                              │
+               ▼                              ▼
+┌─────────────────────────────┐┌──────────────────────────────┐
+│     FluentValidation        ││ Exception Handling Middleware│
+│ (Request Boundary Validation││ (RFC 7807 Problem Details)   │
+└──────────────┬──────────────┘└──────────────┬───────────────┘
+               │                              │
+               ▼                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Data Access Layer (Dapper / ADO.NET)           │
+│   Strict Contract: Executes T-SQL Stored Procedures ONLY    │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│            Microsoft SQL Server (T-SQL Engine)              │
+│  - Relational Schema (3NF, Check & Foreign Key Constraints) │
+│  - Functions: fn_CalculateAge, fn_GetFiscalYearPeriods      │
+│  - Stored Procedures: sp_GetCrewList, sp_GetFinancialReport │
+│  - Recursive CTEs for Hierarchical Chart of Accounts Rollup │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### Ship
-
-Each ship has a unique code, a name, and has assigned fiscal year code determining its accounting period — for example, `"0112"` means the fiscal year runs from January to December, while `"0403"` means the fiscal year starts in April and ends in March the following year. The status of a ship indicates whether it is currently active or inactive in service. Only active ships should be considered in operational queries and reports.
-
-### Crew
-
-Each ship maintains a roster of crew members. A crew member is identified by a unique ID and has personal details such as name, nationality, birth date, and rank. Ranks follow a standard maritime classification (e.g., Master, Chief Engineer, Chief Officer), and typically only one crew member holds each rank on board during a contract. [^1]
-
-Crew service history is recorded per ship and includes contract periods represented by key dates: Sign On Date (when the crew member joins the ship), Sign Off Date (when they leave), and End of Contract Date (the scheduled end of their contract). These dates determine the crew member’s current status relative to the ship:
-
-- A crew member with a Sign On Date in the past, no Sign Off Date, and an End of Contract Date not yet passed is considered **Onboard**.
-- If the Sign On Date is in the future, the crew member is **Planned** to join.
-- If a crew member has no Sign Off Date, but the current date is more than 30 days past their End of Contract Date, their status is **Relief Due**.
-- If the Sign Off Date is set, the crew member’s service is considered complete (**Signed Off**).
-
-### User and Ship Assignment
-
-Users of the system represent application users who can be assigned to one or more ships. Each user has a name and role within the system. Users can view the ships they are assigned to. The relationship between users and ships is many-to-many, allowing for flexible assignment scenarios.
-
-### Financial Data and Accounting
-
-Each ship has associated financial data aligned with its fiscal year settings. The financial data includes budgeted amounts and actual transaction values, organized by accounting periods (monthly) and account numbers from a hierarchical Chart of Accounts (COA). Accounts can be parent (summary) or child (detail) types, forming a tree-like structure. [^2]
-
-Budgets and actuals are recorded for child accounts, and parent account values should be computed by aggregating their child accounts. Budget and actual data may include zero values, always non-negative values, and are stored for specific ship codes, account numbers, and accounting periods. Year-to-date (YTD) calculations must respect each ship’s fiscal year settings, summing values from the start of the fiscal year to the selected period.
-
----
-
-## Sample Data
-
-### ships
-
-| Code   | Name             | FiscalYear | Status  |
-|--------|------------------|------------|---------|
-| SHIP01 | Flying Dutchman   | 0112       | Active  |
-| SHIP02 | Thousand Sunny   | 0403       | Active  |
-
-### Crew Members
-
-| CrewMemberId | FirstName | LastName | BirthDate  | Nationality |
-|--------------|-----------|----------|------------|-------------|
-| CREW001      | Soka      | Philip   | 1980-07-30 | Greek       |
-| CREW002      | Masteros  | Philip   | 1980-07-30 | Greek       |
-
-### Crew Service History
-
-| CrewMemberId | Rank           | ShipCode | SignOnDate | SignOffDate | EndOfContractDate |
-|--------------|----------------|----------|------------|-------------|-------------------|
-| CREW001      | Master         | SHIP01   | 2025-04-05 | NULL        | 2025-07-05        |
-| CREW002      | Chief Engineer | SHIP01   | 2025-04-04 | NULL        | 2025-07-04        |
-
-### Chart of Accounts (COA)
-
-- **7000000** OPERATING EXPENSES (Parent)  
-  - **7100000** AWARD AND GRANT TO INDIVIDUALS (Child of 7000000)  
-
-### Budget Data
-
-| ShipCode | AccountNumber | AccountPeriod | BudgetValue |
-|----------|---------------|---------------|-------------|
-| SHIP01   | 7135000       | 2025-01       | 0           |
-| SHIP01   | 7135000       | 2025-01       | 1000        |
-| SHIP01   | 7135000       | 2025-02       | 1200        |
-| ...      | ...           | ...           | ...         |
-| SHIP01   | 7135000       | 2025-12       | 900         |
-
-### Account Transactions
-
-| ShipCode | AccountNumber | AccountPeriod | ActualValue |
-|----------|---------------|---------------|-------------|
-| SHIP01   | 7135000       | 2025-01       | 300         |
-| SHIP01   | 7135000       | 2025-01       | 0           |
-| SHIP01   | 7135000       | 2025-01       | 700         |
+- **Separation of Concerns:** Clean architecture isolating HTTP transport, request validation, business rules, and database execution.
+- **Stored Procedure Isolation:** The application contains zero dynamic SQL and zero ORM-generated table queries. Every database operation runs through a dedicated, parameterized stored procedure.
+- **Security:** Complete parameterization eliminates SQL injection risks. Dynamic sorting in `sp_GetCrewList` uses compile-time whitelisted `CASE` expressions. Passwords are encrypted using salted BCrypt hashes. Endpoints support JWT Bearer authentication.
 
 ---
 
-## Challenge Requirements
+## 2. Database Design & Entity Relationship Diagram (ERD)
 
-### 1. Database Challenge
+Full architectural details, data dictionaries, and constraints are documented in [`database/ERD.md`](database/ERD.md) and [`database/erd.svg`](database/erd.svg).
 
-1. **Design the Database Schema**
-   - Create an Entity Relationship Diagram (ERD) based on the provided business context.
-   - Write the SQL queries in T-SQL (i.e. SQL Server-compatible). Assume that the target database runs on SQL Server Express or Azure SQL Database. Avoid MySQL-specific syntax.
-   - Identify and define necessary entities, relationships, and data types.
-   - Provide DDL (CREATE TABLE) scripts for all necessary entities.
-   - Include primary keys, foreign keys, and appropriate constraints (e.g., budget and actual values must not be negative).
+### Mermaid ERD
 
-2. **DDL Scripts**  
-   - Write SQL scripts to create the necessary tables and relationships.
-   - Avoid hardcoding assumptions — focus on building a flexible and normalized design.
+```mermaid
+erDiagram
+    SHIPS ||--o{ USER_SHIP_ASSIGNMENTS : "assigned to"
+    USERS ||--o{ USER_SHIP_ASSIGNMENTS : "has"
+    SHIPS ||--o{ CREW_SERVICE_HISTORIES : "serves on"
+    CREW_MEMBERS ||--o{ CREW_SERVICE_HISTORIES : "signs"
+    RANKS ||--o{ CREW_SERVICE_HISTORIES : "assigned"
+    SHIPS ||--o{ BUDGETS : "budgeted for"
+    SHIPS ||--o{ ACCOUNT_TRANSACTIONS : "incurs"
+    CHART_OF_ACCOUNTS ||--o{ CHART_OF_ACCOUNTS : "parent of"
+    CHART_OF_ACCOUNTS ||--o{ BUDGETS : "allocates"
+    CHART_OF_ACCOUNTS ||--o{ ACCOUNT_TRANSACTIONS : "categorizes"
 
-3. **Insert Sample Data**  
-   - Include meaningful sample data covering:
-     - At least 5 ships with varying status (active/inactive) and fiscal years (e.g., Jan–Dec, Apr–Mar).
-     - Crew records with realistic service history (e.g., onboard, relief due, sign-off) with **at least 20 crew members per ship**, including a variety of ranks and overlapping service periods.
-     - Rank types and references for crew with **at least 5 distinct crew rank types**.
-     - Chart of Accounts with at least 5 parent accounts, each having a minimum of 5 child accounts arranged in a hierarchy of at least 2 levels.
-     - Budget data for at least 3 ships (aligned with the crew data), spanning fiscal years 0112 and 0403, covering the full periods of 2024 and 2025, with values for a minimum of 5 accounts.
-     - Account transaction data for at least 3 ships (corresponding to those in the budget and crew data), covering fiscal years 0112 and 0403, including at least 6 periods in 2025 and the full period of 2024.
+    SHIPS {
+        varchar(20) ShipCode PK
+        nvarchar(100) Name
+        varchar(4) FiscalYear "e.g. 0112, 0403"
+        varchar(20) Status "Active | Inactive"
+    }
 
-4. **Stored Procedures / Views**  
-   - Crew List: Create a stored procedure that returns crew members currently onboard or relief due for a selected ship as of today's date, supporting:
-     - Pagination (page size and page number)
-     - Sorting by any column (Rank Name, Crew ID, First/Last Name, Age, Nationality, SignOnDate, Status)
-     - Searching (filter by any column except Status, including partial date matches like `05 Apr`)
-     - Exclude any crew members who have signed off (i.e., crew with a non-null SignOffDate).
-   
-   - Financial Reports: Create stored procedures to return detailed and summary financial expense reports for a specific ship and period, including:
-     - COA Description and Account Number
-     - Actual and Budget values for the selected period
-     - Variances (Actual - Budget)
-     - Year-To-Date (YTD) Actuals, Budgets, and Variances calculated based on the ship’s fiscal year
-    
-#### Financial Data Notes (Summary)
+    USERS {
+        int UserId PK
+        nvarchar(50) Username UK
+        nvarchar(100) FullName
+        nvarchar(100) Email UK
+        nvarchar(50) Role
+        nvarchar(255) PasswordHash
+    }
 
-- Budgets and actual transaction amounts are recorded at the child account level only.
-- Parent account values must be calculated by aggregating their child accounts.
-- Fiscal year codes (e.g., "0112" for Jan-Dec, "0403" for Apr-Mar) define the YTD calculation period.
-- Stored procedures must calculate monthly and YTD values for budget and actuals, as well as variances.
-- `0` and `NULL` are not the same. `0` indicates a value of zero (e.g. zero cost). `NULL` means the value is unknown, missing, or not applicable.
-- Only include records where budget or actual values are non-zero.
-    
-#### Example Output (Crew List)
+    USER_SHIP_ASSIGNMENTS {
+        int UserId PK,FK
+        varchar(20) ShipCode PK,FK
+        datetime2 AssignedAt
+    }
 
-| Rank Name      | Crew Member ID | First Name | Last Name  | Age | Nationality | SignOnDate | Status   |
-|----------------|----------------|------------|------------|-----|-------------|------------|----------|
-| Master         | CREW001        | Soka       | Philip     | 45  | Greek       | 05 Apr 2025| Onboard  |
-| Chief Engineer | CREW002        | Masteros   | Philip     | 45  | Greek       | 05 Apr 2025| Onboard  |
-| Chief Officer  | CREW003        | John       | Masterbear | 50  | Greek       | 08 Apr 2025| Onboard  |
-| Cadet          | CREW004        | Bob        | Marley     | 27  | Mexican     | 05 Apr 2025| Onboard  |
-| Oiler          | CREW005        | John       | Chena      | 30  | Mexican     | 08 Apr 2025| Relief Due |
+    RANKS {
+        varchar(20) RankCode PK
+        nvarchar(50) RankName UK
+        nvarchar(50) Department "Deck | Engine | Catering"
+        int SeniorityLevel
+    }
 
-#### Example Output (Financial Report Detail)
+    CREW_MEMBERS {
+        varchar(20) CrewMemberId PK
+        nvarchar(50) FirstName
+        nvarchar(50) LastName
+        date BirthDate
+        nvarchar(50) Nationality
+    }
 
-| COA Description            | Account Number | Actual (Jul 2025) | Budget (Jul 2025) | Variance Actual | Actual YTD (Jan-Jul 2025) | Budget YTD (Jan-Jul 2025) | Variance YTD |
-|----------------------------|----------------|-------------------|-------------------|-----------------|---------------------------|---------------------------|--------------|
-| OPERATING EXPENSE           | 7000000        | 3300              |                   | 3300            | 9600                      | 9900                      | 0            |
-| AWARD AND GRANT TO INDIVIDUALS | 7100000        | 3300              | 3300              | 0               | 9600                      | 9900                      | 0            |
-| AWARDS                     | 7120000        |                   | 1000              | 1100            | -100                      | 3200                      | 3300         | -100         |
-| SCHOLARSHIPS               | 7135000        | 2300              | 2200              | 100             | 6400                      | 6300                      | 100          |
+    CREW_SERVICE_HISTORIES {
+        int ServiceHistoryId PK
+        varchar(20) CrewMemberId FK
+        varchar(20) ShipCode FK
+        varchar(20) RankCode FK
+        date SignOnDate
+        date SignOffDate "NULL if active"
+        date EndOfContractDate
+    }
 
-Access all data only via stored procedures. Use realistic data and ensure correctness of fiscal year–based YTD calculations.
+    CHART_OF_ACCOUNTS {
+        varchar(20) AccountNumber PK
+        nvarchar(150) Description
+        varchar(20) ParentAccountNumber FK "Self-referencing"
+        varchar(10) AccountType "Parent | Child"
+        int HierarchyLevel
+    }
 
----
+    BUDGETS {
+        int BudgetId PK
+        varchar(20) ShipCode FK
+        varchar(20) AccountNumber FK
+        varchar(7) AccountPeriod "YYYY-MM"
+        decimal(18_2) BudgetValue ">= 0"
+    }
 
-### 2. API Challenge
+    ACCOUNT_TRANSACTIONS {
+        int TransactionId PK
+        varchar(20) ShipCode FK
+        varchar(20) AccountNumber FK
+        varchar(7) AccountPeriod "YYYY-MM"
+        decimal(18_2) ActualValue ">= 0"
+        date TransactionDate
+    }
+```
 
-#### Objectives:
-
-- Build REST APIs in C# that consume your stored procedures.
-- Implement endpoints for users, ships, crews, and financial reporting.
-- Implement the following user stories (including but not limited to):
-  - Add and list users.
-  - Add and list ships.
-  - Assign ships to users and retrieve ships by user.
-  - Retrieve crew lists for ships (per database SP).
-  - Retrieve financial reports per ship and accounting period (per database SP).
-
-#### Requirements
-
-- APIs should interact only with the database via stored procedures.
-- APIs should handle errors and edge cases gracefully
-- Follow RESTful principles.
-- Follow best practices in code structure, naming, and testability.
-- Use appropriate HTTP methods and status codes.
-- Write unit tests using xUnit.
-
----
-
-## Evaluation Criteria
-
-Your submission will be evaluated based on the following aspects:
-
-- **Database design:** Appropriate data types, constraints, lengths, relationships, and normalization.
-- **Stored procedure logic:** Accurate calculations covering all required features and functions. Emsire stored procedures are safe from SQL injection.
-- **Code quality and readability:** Clean, maintainable, and well-structured code following consistent naming and formatting conventions.
-- **Testing:** Unit tests or scripts demonstrating correctness of the logic and covering both typical and edge cases.
-- **Error and exception handling:** Robust handling of edge cases, validation errors, and unexpected failures, with meaningful error codes/messages.
-- **API validation and input handling:** Validate all API inputs (e.g., required fields, date formats) properly with clear error messages and appropriate HTTP status codes.
-- **Best practices and principles:** Adherence to clean code, modularity, and design patterns.
-- **Basic system design:** Overall architecture and scalability considerations.
-- **Documentation:** Clear README explaining your design decisions and how to run your solution.
-
-### Nice to have
-
-- Simple authentication procedure for the API (e.g. JWT auth or API key-based)
-- Use of scalar or table-valued functions to promote logic reuse.
-- Basic logging for key actions.
-- Swagger UI for API documentation.
-- Docker setup for easy environment setup and deployment.
-- Basic CI scripting to automate tests or builds.
+### Key Schema Features
+1. **Fiscal Year Constraints:** `CHECK (FiscalYear LIKE '[0-1][0-9][0-1][0-9]')` with sub-string month range checks (`01` through `12`).
+2. **Financial Non-Negativity:** `CHECK (BudgetValue >= 0)` and `CHECK (ActualValue >= 0)` prevent negative values.
+3. **Date Consistency:** `CHECK (EndOfContractDate >= SignOnDate AND (SignOffDate IS NULL OR SignOffDate >= SignOnDate))` prevents inverted contract dates.
+4. **Covering Indexes:** `IX_CrewServiceHistories_Ship_Active`, `IX_Budgets_Ship_Period`, and `IX_AccountTransactions_Ship_Period` provide high performance on multi-ship operational joins.
+5. **Rank Exclusivity Enforcement:** Trigger `TR_CrewServiceHistories_NoRankOverlap` actively prevents any overlapping active service dates for identical ranks on the same vessel.
 
 ---
 
-## Deliverable
+## 3. Stored Procedures & Business Logic
 
-Please create a **GitHub repository** containing your full solution, including:
+Located in [`database/03_stored_procedures.sql`](database/03_stored_procedures.sql):
 
-- Database scripts (DDL, stored procedures, sample data, and ERD)
-- API source code and tests
-- Documentation (README)
-- Any additional files (e.g., Dockerfile, CI scripts, Swagger specs)
+### A. Crew List (`sp_GetCrewList`)
+- **Status Calculation Rule:**
+  - `SignOffDate IS NOT NULL` $\to$ Signed Off (excluded from output).
+  - `SignOnDate > @AsOfDate` $\to$ Planned (excluded from active operational view).
+  - `DATEDIFF(day, EndOfContractDate, @AsOfDate) > 30` $\to$ **Relief Due**.
+  - `SignOnDate <= @AsOfDate` $\to$ **Onboard**.
+- **Pagination & Sorting:** Parameterized `OFFSET ... FETCH NEXT` with deterministic secondary sort on `CrewMemberId`.
+- **Search:** Search across all non-status fields (Rank Name, Crew ID, First Name, Last Name, Age as text, Nationality, formatted date `05 Apr 2025` allowing partial date matches like `05 Apr`).
 
-Share the GitHub repo link with us via e-mail.
+### B. Financial Reports (`sp_GetFinancialReportDetail` & `sp_GetFinancialReportSummary`)
+- **Detailed Report (Period & Hierarchical COA):** Scoped to a specific accounting period (e.g. `2025-07`), returning both parent summary accounts and leaf detail accounts. Uses recursive Common Table Expression (`AccountLeaves`) to roll up child account actuals/budgets to parent summary accounts with monthly and fiscal year YTD variances.
+- **Summary Report (YTD Non-COA):** Per client clarification, the summary report is YTD and not specific to any COA. It aggregates total ship spend and budgeted amounts month-by-month across the fiscal year up to the cutoff period, providing cumulative YTD totals and variances without COA breakdown.
+- **Fiscal Year YTD Logic:** Encapsulated in table-valued function `dbo.fn_GetFiscalYearPeriods(@FiscalYearCode, @TargetPeriod)`.
+  - For `0112` (calendar year): Start period is `YYYY-01`.
+  - For `0403` (cross-calendar year): If period month is $\ge 4$, start is `YYYY-04`. If period month is $< 4$ (e.g. `2025-02`), start is `(YYYY-1)-04` (April of previous year).
+- **Zero/Null Rule:** Excludes records where both monthly and YTD budget and actual amounts are zero.
+---
+
+## 4. API Endpoints
+
+### Authentication
+- `POST /api/auth/login` – Authenticates user and returns JWT Bearer token.
+
+### Users
+- `GET /api/users` – List all system users.
+- `GET /api/users/{id}` – Get user by ID.
+- `POST /api/users` – Register new user.
+- `GET /api/users/{id}/ships` – Get ships assigned to a specific user.
+- `POST /api/users/{id}/ships` – Assign a ship to a user (`{ "shipCode": "SHIP01" }`).
+
+### Ships
+- `GET /api/ships` – List all ships (supports `?status=Active` / `Inactive`).
+- `GET /api/ships/{code}` – Get ship by code.
+- `POST /api/ships` – Register a new ship (`ShipCode`, `Name`, `FiscalYear`, `Status`).
+- `GET /api/ships/{code}/users` – Get users assigned to a ship.
+- `GET /api/ships/{code}/crew` – Retrieve crew roster with pagination, sorting, search (`?pageNumber=1&pageSize=10&sortColumn=SignOnDate&sortDirection=ASC&searchTerm=Jan&asOfDate=2026-10-28`).
+- `GET /api/ships/{code}/financial/detail` – Detailed financial report (`?period=2025-07`).
+- `GET /api/ships/{code}/financial/summary` – Summary parent-level financial report (`?period=2025-07`).
 
 ---
 
-If you have any questions or need clarifications, feel free to contact us by e-mail.
+## 5. Quick Start & Execution Guide
 
-[^1]: Reference for crew ranks: [https://nedcon.ro/crew-structure-on-board-merchant-ships-deck-department/](https://nedcon.ro/crew-structure-on-board-merchant-ships-deck-department/ )
-[^2]: Reference for chart of accounts: [https://www.gocivilairpatrol.com/media/cms/R173_001_CoA_3918FC7AF372F.pdf](https://www.gocivilairpatrol.com/media/cms/R173_001_CoA_3918FC7AF372F.pdf)
+### Option 1: Local Setup (.NET CLI + LocalDB / SQL Server)
+
+1. **Deploy Database & Seed Data:**
+   Run SQL Server LocalDB or SQL Server Express:
+   ```powershell
+   sqlcmd -S "(localdb)\MSSQLLocalDB" -E -i database/01_schema.sql
+   sqlcmd -S "(localdb)\MSSQLLocalDB" -E -i database/02_functions.sql
+   sqlcmd -S "(localdb)\MSSQLLocalDB" -E -i database/03_stored_procedures.sql
+   sqlcmd -S "(localdb)\MSSQLLocalDB" -E -i database/04_sample_data.sql
+   ```
+2. **Build and Run the Web API:**
+   ```bash
+   dotnet build ShipManagement.sln
+   dotnet run --project src/ShipManagement.Api
+   ```
+3. **Open Swagger UI:**
+   Navigate to `https://localhost:5001` or `http://localhost:5000` in your browser.
+
+---
+
+### Option 2: Docker Compose (All-in-One)
+
+Launch SQL Server 2022, run automated database schema migration, and start the API in Docker:
+```bash
+docker compose up --build
+```
+The API is available at `http://localhost:5000`.
+
+---
+
+## 6. Running Tests
+
+The test suite includes 66 unit, domain, validation, and database stored procedure integration tests:
+```bash
+dotnet test
+```
+
+Test breakdown:
+- `FiscalYearCalculationTests`: Verifies calendar (`0112`) and cross-calendar (`0403`) periods, boundary months, and year rollovers.
+- `CrewStatusCalculationTests`: Verifies Onboard, Relief Due (>30 days overdue), Planned, and Signed Off transitions.
+- `AgeCalculationTests`: Validates birthday passed vs. not yet reached.
+- `ValidatorTests`: Validates incoming requests, date patterns, regex, ranges, and sort column whitelists.
+- `ControllersUnitTests`: Verifies HTTP response codes, DTO mappings, and controller behavior with Moq.
+- `StoredProcedureIntegrationTests`: Executes stored procedures directly on SQL Server to verify pagination, search, parent rollups, and YTD calculations.
+- `ApiIntegrationTests`: End-to-end integration tests using `WebApplicationFactory<Program>`.

@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: ae_sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=StrongPassword123!
+      - MSSQL_PID=Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'StrongPassword123!' -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  db-migrator:
+    image: mcr.microsoft.com/mssql-tools:latest
+    container_name: ae_db_migrator
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    volumes:
+      - ./database:/scripts
+    entrypoint: >
+      /bin/bash -c "
+      echo 'Applying database DDL and seeding scripts...' &&
+      /opt/mssql-tools/bin/sqlcmd -S sqlserver -U sa -P 'StrongPassword123!' -i /scripts/01_schema.sql &&
+      /opt/mssql-tools/bin/sqlcmd -S sqlserver -U sa -P 'StrongPassword123!' -i /scripts/02_functions.sql &&
+      /opt/mssql-tools/bin/sqlcmd -S sqlserver -U sa -P 'StrongPassword123!' -i /scripts/03_stored_procedures.sql &&
+      /opt/mssql-tools/bin/sqlcmd -S sqlserver -U sa -P 'StrongPassword123!' -i /scripts/04_sample_data.sql &&
+      echo 'Database initialization complete!'
+      "
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ae_ship_api
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=ShipManagementDb;User Id=sa;Password=StrongPassword123!;TrustServerCertificate=True;
+
+volumes:
+  mssql_data:

@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 760" width="100%" height="100%">
+  <defs>
+    <style>
+      .entity-box { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; rx: 6px; }
+      .header-box { fill: var(--accent); opacity: 0.15; rx: 6px; }
+      .entity-title { font-family: monospace; font-size: 14px; font-weight: bold; fill: var(--fg); }
+      .attr-pk { font-family: monospace; font-size: 11px; font-weight: bold; fill: var(--accent); }
+      .attr-fk { font-family: monospace; font-size: 11px; font-style: italic; fill: var(--warning); }
+      .attr-normal { font-family: monospace; font-size: 11px; fill: var(--muted); }
+      .rel-line { stroke: var(--border); stroke-width: 1.5; fill: none; }
+      .rel-label { font-family: sans-serif; font-size: 10px; fill: var(--muted); }
+    </style>
+  </defs>
+
+  <!-- Relationships Lines -->
+  <!-- Ships to UserShipAssignments -->
+  <path d="M 230 110 L 370 110" class="rel-line" />
+  <!-- Users to UserShipAssignments -->
+  <path d="M 610 110 L 750 110" class="rel-line" />
+  <!-- Ships to CrewServiceHistories -->
+  <path d="M 130 220 L 130 310" class="rel-line" />
+  <!-- CrewMembers to CrewServiceHistories -->
+  <path d="M 430 380 L 260 380" class="rel-line" />
+  <!-- Ranks to CrewServiceHistories -->
+  <path d="M 130 570 L 130 490" class="rel-line" />
+  <!-- Ships to Budgets -->
+  <path d="M 230 180 L 400 180 L 400 240 L 450 240" class="rel-line" />
+  <!-- Ships to AccountTransactions -->
+  <path d="M 230 200 L 730 200 L 730 240" class="rel-line" />
+  <!-- ChartOfAccounts to Budgets -->
+  <path d="M 600 580 L 530 580 L 530 400" class="rel-line" />
+  <!-- ChartOfAccounts to AccountTransactions -->
+  <path d="M 770 580 L 770 420" class="rel-line" />
+  <!-- ChartOfAccounts Self Reference -->
+  <path d="M 850 630 C 910 630, 910 690, 850 690" class="rel-line" />
+
+  <!-- Entity: Ships -->
+  <g transform="translate(30, 30)">
+    <rect width="200" height="190" class="entity-box" />
+    <rect width="200" height="30" class="header-box" />
+    <text x="10" y="21" class="entity-title">Ships</text>
+    <text x="10" y="55" class="attr-pk">PK ShipCode (VARCHAR)</text>
+    <text x="10" y="80" class="attr-normal">Name (NVARCHAR)</text>
+    <text x="10" y="105" class="attr-normal">FiscalYear (VARCHAR: 0112)</text>
+    <text x="10" y="130" class="attr-normal">Status (Active/Inactive)</text>
+    <text x="10" y="155" class="attr-normal">CreatedAt (DATETIME2)</text>
+    <text x="10" y="175" class="attr-normal">UpdatedAt (DATETIME2)</text>
+  </g>
+
+  <!-- Entity: UserShipAssignments -->
+  <g transform="translate(370, 50)">
+    <rect width="240" height="120" class="entity-box" />
+    <rect width="240" height="30" class="header-box" />
+    <text x="10" y="21" class="entity-title">UserShipAssignments</text>
+    <text x="10" y="55" class="attr-pk">PK, FK UserId (INT)</text>
+    <text x="10" y="80" class="attr-pk">PK, FK ShipCode (VARCHAR)</text>
+    <text x="10" y="105" class="attr-normal">AssignedAt (DATETIME2)</text>
+  </g>
+
+  <!-- Entity: Users -->
+  <g transform="translate(750, 30)">
+    <rect width="180" height="170" class="entity-box" />
+    <rect width="180" height="30" class="header-box" />
+    <text x="10" y="21" class="entity-title">Users</text>
+    <text x="10" y="55" class="attr-pk">PK UserId (INT)</text>
+    <text x="10" y="78" class="attr-normal">Username (NVARCHAR)</text>
+    <text x="10" y="100" class="attr-normal">FullName (NVARCHAR)</text>
+    <text x="10" y="122" class="attr-normal">Email (NVARCHAR)</text>
+    <text x="10" y="144" class="attr-normal">Role (NVARCHAR)</text>
+    <text x="10" y="162" class="attr-normal">IsActive (BIT)</text>
+  </g>
+
+  <!-- Entity: CrewServiceHistories -->
+  <g transform="translate(30, 310)">
+    <rect width="230" height="180" class="entity-box" />
+    <rect width="230" height="30" class="header-box" />
+    <text x="10" y="21" class="entity-title">CrewServiceHistories</text>
+    <text x="10" y="55" class="attr-pk">PK ServiceHistoryId (INT)</text>
+    <text x="10" y="78" class="attr-fk">FK CrewMemberId (VARCHAR)</text>
+    <text x="10" y="100" class="attr-fk">FK ShipCode (VARCHAR)</text>
+    <text x="10" y="122" class="attr-fk">FK RankCode (VARCHAR)</text>
+    <text x="10" y="144" class="attr-normal">SignOnDate (DATE)</text>
+    <text x="10" y="162" class="attr-normal">SignOffDate (DATE, NULL)</text>
+    <text x="10" y="176" class="attr-normal">EndOfContractDate (DATE)</text>
+  </g>
+
+  <!-- Entity: CrewMembers -->
+  <g transform="translate(430, 300)">
+    <rect width="200" height="150" class="entity-box" />
+    <rect width="200" height="30" class="header-box" />
+    <text x="10" y="21" class="entity-title">CrewMembers</text>
+    <text x="10" y="55" class="attr-pk">PK CrewMemberId (VARCHAR)</text>
+    <text x="10" y="78" class="attr-normal">FirstName (NVARCHAR)</text>
+    <text x="10" y="100" class="attr-normal">LastName (NVARCHAR)</text>
+    <text x="10" y="122" class="attr-normal">BirthDate (DATE)</text>
+    <text x="10" y="144" class="attr-normal">Nationality (NVARCHAR)</text>
+  </g>
+
+  <!-- Entity: Ranks -->
+  <g transform="translate(30, 570)">
+    <rect width="200" height="130" class="entity-box" />
+    <rect width="200" height="30" class="header-box" />
+    <text x="10" y="21" class="entity-title">Ranks</text>
+    <text x="10" y="55" class="attr-pk">PK RankCode (VARCHAR)</text>
+    <text x="10" y="80" class="attr-normal">RankName (NVARCHAR)</text>
+    <text x="10" y="105" class="attr-normal">Department (Deck/Eng)</text>
+    <text x="10" y="125" class="attr-normal">SeniorityLevel (INT)</text>
+  </g>
+
+  <!-- Entity: Budgets -->
+  <g transform="translate(450, 240)">
+    <rect width="210" height="150" class="entity-box" />
+    <rect width="210" height="30" class="header-box" />
+    <text x="10" y="21" class="entity-title">Budgets</text>
+    <text x="10" y="55" class="attr-pk">PK BudgetId (INT)</text>
+    <text x="10" y="78" class="attr-fk">FK ShipCode (VARCHAR)</text>
+    <text x="10" y="100" class="attr-fk">FK AccountNumber (VARCHAR)</text>
+    <text x="10" y="122" class="attr-normal">AccountPeriod (YYYY-MM)</text>
+    <text x="10" y="144" class="attr-normal">BudgetValue (DECIMAL &gt;= 0)</text>
+  </g>
+
+  <!-- Entity: AccountTransactions -->
+  <g transform="translate(700, 240)">
+    <rect width="230" height="170" class="entity-box" />
+    <rect width="230" height="30" class="header-box" />
+    <text x="10" y="21" class="entity-title">AccountTransactions</text>
+    <text x="10" y="55" class="attr-pk">PK TransactionId (INT)</text>
+    <text x="10" y="78" class="attr-fk">FK ShipCode (VARCHAR)</text>
+    <text x="10" y="100" class="attr-fk">FK AccountNumber (VARCHAR)</text>
+    <text x="10" y="122" class="attr-normal">AccountPeriod (YYYY-MM)</text>
+    <text x="10" y="144" class="attr-normal">ActualValue (DECIMAL &gt;= 0)</text>
+    <text x="10" y="162" class="attr-normal">TransactionDate (DATE)</text>
+  </g>
+
+  <!-- Entity: ChartOfAccounts -->
+  <g transform="translate(600, 560)">
+    <rect width="250" height="150" class="entity-box" />
+    <rect width="250" height="30" class="header-box" />
+    <text x="10" y="21" class="entity-title">ChartOfAccounts</text>
+    <text x="10" y="55" class="attr-pk">PK AccountNumber (VARCHAR)</text>
+    <text x="10" y="78" class="attr-normal">Description (NVARCHAR)</text>
+    <text x="10" y="100" class="attr-fk">FK ParentAccountNumber</text>
+    <text x="10" y="122" class="attr-normal">AccountType (Parent/Child)</text>
+    <text x="10" y="144" class="attr-normal">HierarchyLevel (INT)</text>
+  </g>
+</svg>
