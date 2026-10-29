@@ -1,9 +1,9 @@
 # Anglo-Eastern Ship Management – Backend Solution
 
-[![Build & Test CI](https://github.com/angloeastern/backend-code-challenge/actions/workflows/ci.yml/badge.svg)](https://github.com/angloeastern/backend-code-challenge/actions/workflows/ci.yml)
+[![Build & Test CI](https://github.com/syawqy/ae-backend-code-challenge/actions/workflows/ci.yml/badge.svg)](https://github.com/syawqy/ae-backend-code-challenge/actions/workflows/ci.yml)
 ![.NET 8](https://img.shields.io/badge/.NET-8.0-blue.svg)
 ![SQL Server](https://img.shields.io/badge/SQL%20Server-2019%2B-red.svg)
-![Tests](https://img.shields.io/badge/Tests-66%20Passed-brightgreen.svg)
+![Tests](https://img.shields.io/badge/Tests-69%20Passed-brightgreen.svg)
 
 Production-ready backend solution for ship management, crew rosters, and hierarchical financial expense reporting. Built with **C# (.NET 8)** and **Microsoft SQL Server (T-SQL)**, adhering strictly to the architectural constraint: **Database access via stored procedures only**.
 
