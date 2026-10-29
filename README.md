@@ -1,6 +1,5 @@
 # Anglo-Eastern Ship Management – Backend Solution
 
-[![Build & Test CI](https://github.com/syawqy/ae-backend-code-challenge/actions/workflows/ci.yml/badge.svg)](https://github.com/syawqy/ae-backend-code-challenge/actions/workflows/ci.yml)
 ![.NET 8](https://img.shields.io/badge/.NET-8.0-blue.svg)
 ![SQL Server](https://img.shields.io/badge/SQL%20Server-2019%2B-red.svg)
 ![Tests](https://img.shields.io/badge/Tests-69%20Passed-brightgreen.svg)
